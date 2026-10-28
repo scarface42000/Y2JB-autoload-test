@@ -6,6 +6,7 @@ on:
     paths:
       - 'download0/cache/**/Payload_Manager_v0.6.3.elf'
       - 'payloads/Relapse.js'
+      - 'assets/icon0-PPSA01650.png'
       - '.github/workflows/build-skyboz-loader.yml'
   workflow_dispatch:
 
@@ -39,6 +40,7 @@ jobs:
           cp 'download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf' "$cache/Payload_Manager_v0.6.3.elf"
           test -s "$cache/Relapse.js"
           test -s "$cache/Payload_Manager_v0.6.3.elf"
+          test -s assets/icon0-PPSA01650.png
 
       - name: Patch the UFS2 image in FreeBSD
         uses: vmactions/freebsd-vm@v1
@@ -83,8 +85,9 @@ jobs:
       - name: Upload the patched image
         uses: actions/upload-artifact@v4
         with:
-          name: download0-dat-skyboz-loader
+          name: skyboz-loader-ps5-ready-files
           path: |
             skyboz-build/download0.dat
             skyboz-build/download0.dat.sha256
+            assets/icon0-PPSA01650.png
           if-no-files-found: error
