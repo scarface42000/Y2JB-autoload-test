@@ -1,12 +1,15 @@
-Y2JB Payload Manager autoload patch (experimental)
+Y2JB SKYBOZ Loader autoload patch
 
 Changes:
-- Adds Payload_Manager_v0.6.3.elf to the YouTube download0 cache assets.
-- After Relapse reports successful completion, Relapse.js attempts to connect to 127.0.0.1:9021 and stream the ELF to elfldr.
-- Copies the 512x512 SKYBOZ icon to /user/appmeta/PPSA01650/icon0.png after Relapse succeeds, saving the original once and restoring SKYBOZ on later runs if it was replaced.
+- Adds Payload_Manager_v0.6.3.elf, SKYBOZ artwork, and the title-metadata helper to the YouTube download0 cache.
+- After Relapse succeeds, installs icon0.png and a persistent SKYBOZ copy, then sets both PNG files to read-only mode 0444.
+- Updates localized titleName entries in the user param.json and, when present, the system param.json, plus the related app.db and appinfo.db records for PPSA01650.
+- Creates one-time pre-change backups in /data/skyboz-loader/ and verifies the SQLite backups before changing either database.
+- Waits for elfldr to stabilize and retries connections to reduce Payload Manager handoff failures.
 
-Important limitations:
-- This is a modified SOURCE ZIP, not a rebuilt download0.dat UFS2 image.
-- The code has not been tested on a physical PS5; use at your own risk and keep your original download0.dat.
-- A home-screen restart is needed once for the icon cache to refresh. A YouTube update or reinstall can restore the stock icon; the next Auto Load run reapplies SKYBOZ. This still does not trigger the jailbreak automatically at console power-on.
-- The target firmware is PS5 13.60 as supplied by the user; successful execution depends on the user's exact app/version and source image.
+Limitations:
+- The GitHub Actions build assembles a new download0.dat UFS2 image; use the artifact from the matching successful workflow run.
+- The code has not been tested on a physical PS5. Keep the original download0.dat and manual copies of the databases and param.json files.
+- Restart the home screen once after the first successful installation so the tile cache refreshes. A YouTube reinstall or update can still restore Sony's metadata; launching Auto Load again reapplies SKYBOZ.
+- This does not start the jailbreak automatically at console power-on. The user still launches YouTube to run Y2JB.
+- Target firmware is PS5 13.60 as supplied by the user; success depends on the installed YouTube package and source image.

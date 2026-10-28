@@ -1358,6 +1358,13 @@
             }
         }
 
+        function set_icon_read_only(path) {
+            const result = syscall(SYSCALL.chmod, alloc_string(path), 0o444n);
+            if (result !== 0n) {
+                throw new Error("chmod 0444 failed for " + path + " (" + toHex(result) + ")");
+            }
+        }
+
         function write_binary_file_atomic(path, bytes) {
             const temp_path = path + ".skyboz-tmp";
             try {
@@ -1448,7 +1455,9 @@
                     !icon_bytes_equal(read_file(persistent_target), icon)) {
                     throw new Error("installed icon did not match the source");
                 }
-                await log("[ICON] SKYBOZ tile icon installed for PPSA01650");
+                set_icon_read_only(target);
+                set_icon_read_only(persistent_target);
+                await log("[ICON] SKYBOZ tile icon installed and set read-only (0444) for PPSA01650");
                 await log("[ICON] Restart the home screen once to refresh its cached tile");
                 return true;
             } catch (e) {
@@ -1483,7 +1492,7 @@
             const buf = malloc(BigInt(data.length));
             write_buffer(buf, data);
             let fd = -1n;
-            for (let attempt = 0; attempt < 50; attempt++) {
+            for (let attempt = 0; attempt < 100; attempt++) {
                 fd = syscall(SYSCALL.socket, AF_INET, SOCK_STREAM, 0n);
                 if (fd !== 0xffffffffffffffffn && fd >= 0n) {
                     for (let i = 0; i < 16; i++) write8(sockaddr + BigInt(i), 0);
@@ -1516,7 +1525,7 @@
             syscall(SYSCALL.close, fd);
             await log("[ICONDB] Helper sent; waiting for the database transaction...");
 
-            for (let attempt = 0; attempt < 100; attempt++) {
+            for (let attempt = 0; attempt < 300; attempt++) {
                 if (file_exists(status_path)) {
                     try {
                         const status = String.fromCharCode(...read_file(status_path));
@@ -1543,6 +1552,7 @@
         // This runs only after Relapse reports a successful exploit.
         async function autoload_payload_manager() {
             await autoload_persistent_icon_metadata();
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             const filename = "Payload_Manager_v0.6.3.elf";
             const paths = [
@@ -1568,7 +1578,7 @@
             const buf = malloc(BigInt(data.length));
             write_buffer(buf, data);
             let fd = -1n;
-            for (let attempt = 0; attempt < 50; attempt++) {
+            for (let attempt = 0; attempt < 100; attempt++) {
                 fd = syscall(SYSCALL.socket, AF_INET, SOCK_STREAM, 0n);
                 if (fd !== 0xffffffffffffffffn && fd >= 0n) {
                     for (let i = 0; i < 16; i++) write8(sockaddr + BigInt(i), 0);

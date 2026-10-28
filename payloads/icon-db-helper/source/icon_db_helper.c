@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sqlite3.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,12 @@
 #define APP_DB_BACKUP_TEMP APP_DB_BACKUP ".tmp"
 #define APPINFO_DB_BACKUP BACKUP_DIR "/appinfo.db.before-skyboz-branding"
 #define APPINFO_DB_BACKUP_TEMP APPINFO_DB_BACKUP ".tmp"
+#define SYSTEM_PARAM_PATH "/system_data/priv/appmeta/PPSA01650/param.json"
+#define USER_PARAM_PATH "/user/appmeta/PPSA01650/param.json"
+#define SYSTEM_PARAM_BACKUP BACKUP_DIR "/system-param.json.before-skyboz-branding"
+#define SYSTEM_PARAM_BACKUP_TEMP SYSTEM_PARAM_BACKUP ".tmp"
+#define USER_PARAM_BACKUP BACKUP_DIR "/user-param.json.before-skyboz-branding"
+#define USER_PARAM_BACKUP_TEMP USER_PARAM_BACKUP ".tmp"
 #define STATUS_PATH BACKUP_DIR "/icon-db.status"
 #define STATUS_TEMP STATUS_PATH ".tmp"
 #define ICON_PATH "/user/appmeta/PPSA01650/SKYBOZ_LOADER_icon0.png"
@@ -467,6 +474,307 @@ appinfo_rollback:
     return 0;
 }
 
+
+
+static int copy_file_if_missing(const char *source_path, const char *backup_path,
+    const char *backup_temp, char *error, size_t error_size)
+{
+    if (access(backup_path, F_OK) == 0) return 1;
+    (void)unlink(backup_temp);
+
+    int source_fd = open(source_path, O_RDONLY);
+    if (source_fd < 0) {
+        snprintf(error, error_size, "cannot open %s: %s", source_path, strerror(errno));
+        return 0;
+    }
+    int backup_fd = open(backup_temp, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (backup_fd < 0) {
+        snprintf(error, error_size, "cannot create backup for %s: %s", source_path, strerror(errno));
+        close(source_fd);
+        return 0;
+    }
+
+    unsigned char buffer[8192];
+    int ok = 1;
+    for (;;) {
+        ssize_t amount = read(source_fd, buffer, sizeof(buffer));
+        if (amount == 0) break;
+        if (amount < 0) {
+            if (errno == EINTR) continue;
+            snprintf(error, error_size, "cannot read %s: %s", source_path, strerror(errno));
+            ok = 0;
+            break;
+        }
+        size_t written = 0;
+        while (written < (size_t)amount) {
+            ssize_t count = write(backup_fd, buffer + written, (size_t)amount - written);
+            if (count < 0 && errno == EINTR) continue;
+            if (count <= 0) {
+                snprintf(error, error_size, "cannot write backup for %s: %s", source_path, strerror(errno));
+                ok = 0;
+                break;
+            }
+            written += (size_t)count;
+        }
+        if (!ok) break;
+    }
+    if (ok && fsync(backup_fd) != 0) {
+        snprintf(error, error_size, "cannot sync backup for %s: %s", source_path, strerror(errno));
+        ok = 0;
+    }
+    if (close(source_fd) != 0 && ok) {
+        snprintf(error, error_size, "cannot close %s: %s", source_path, strerror(errno));
+        ok = 0;
+    }
+    if (close(backup_fd) != 0 && ok) {
+        snprintf(error, error_size, "cannot close backup for %s: %s", source_path, strerror(errno));
+        ok = 0;
+    }
+    if (ok && rename(backup_temp, backup_path) != 0) {
+        snprintf(error, error_size, "cannot install backup for %s: %s", source_path, strerror(errno));
+        ok = 0;
+    }
+    if (!ok) (void)unlink(backup_temp);
+    return ok;
+}
+
+static int append_json_bytes(unsigned char **output, size_t *used, size_t *capacity,
+    const unsigned char *bytes, size_t amount)
+{
+    if (amount > SIZE_MAX - *used) return 0;
+    size_t needed = *used + amount;
+    if (needed > *capacity) {
+        size_t next = *capacity ? *capacity : 256;
+        while (next < needed) {
+            if (next > SIZE_MAX / 2) { next = needed; break; }
+            next *= 2;
+        }
+        unsigned char *grown = realloc(*output, next);
+        if (!grown) return 0;
+        *output = grown;
+        *capacity = next;
+    }
+    if (amount) memcpy(*output + *used, bytes, amount);
+    *used = needed;
+    return 1;
+}
+
+static int is_json_space(unsigned char value)
+{
+    return value == ' ' || value == '\t' || value == '\r' || value == '\n';
+}
+
+static int replace_param_title_names(const unsigned char *input, size_t input_size,
+    unsigned char **output, size_t *output_size, int *replacement_count)
+{
+    static const unsigned char key[] = "titleName";
+    static const unsigned char replacement[] = "\"SKYBOZ LOADER\"";
+    unsigned char *result = NULL;
+    size_t result_size = 0, capacity = 0, copy_from = 0, position = 0;
+    int replacements = 0;
+
+    while (position < input_size) {
+        if (input[position] != '"') {
+            position++;
+            continue;
+        }
+
+        size_t string_end = position + 1;
+        while (string_end < input_size) {
+            if (input[string_end] == '\\') {
+                if (string_end + 1 >= input_size) {
+                    free(result);
+                    return 0;
+                }
+                string_end += 2;
+            } else if (input[string_end] == '"') {
+                break;
+            } else {
+                string_end++;
+            }
+        }
+        if (string_end >= input_size) {
+            free(result);
+            return 0;
+        }
+
+        size_t token_size = string_end - position - 1;
+        int is_title_key = token_size == sizeof(key) - 1 &&
+            memcmp(input + position + 1, key, sizeof(key) - 1) == 0;
+        size_t colon = string_end + 1;
+        while (colon < input_size && is_json_space(input[colon])) colon++;
+        if (is_title_key && colon < input_size && input[colon] == ':') {
+            size_t value = colon + 1;
+            while (value < input_size && is_json_space(input[value])) value++;
+            if (value < input_size && input[value] == '"') {
+                size_t value_end = value + 1;
+                while (value_end < input_size) {
+                    if (input[value_end] == '\\') {
+                        if (value_end + 1 >= input_size) {
+                            free(result);
+                            return 0;
+                        }
+                        value_end += 2;
+                    } else if (input[value_end] == '"') {
+                        break;
+                    } else {
+                        value_end++;
+                    }
+                }
+                if (value_end >= input_size ||
+                    !append_json_bytes(&result, &result_size, &capacity,
+                        input + copy_from, value - copy_from) ||
+                    !append_json_bytes(&result, &result_size, &capacity,
+                        replacement, sizeof(replacement) - 1)) {
+                    free(result);
+                    return 0;
+                }
+                replacements++;
+                copy_from = value_end + 1;
+                position = copy_from;
+                continue;
+            }
+        }
+        position = string_end + 1;
+    }
+
+    if (!append_json_bytes(&result, &result_size, &capacity,
+            input + copy_from, input_size - copy_from)) {
+        free(result);
+        return 0;
+    }
+    *output = result;
+    *output_size = result_size;
+    *replacement_count = replacements;
+    return 1;
+}
+
+static int update_param_json_file(const char *path, const char *backup_path,
+    const char *backup_temp, char *error, size_t error_size)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        snprintf(error, error_size, "cannot open %s: %s", path, strerror(errno));
+        return 0;
+    }
+    struct stat info;
+    if (fstat(fd, &info) != 0 || info.st_size <= 0 || info.st_size > 16 * 1024 * 1024) {
+        snprintf(error, error_size, "invalid or oversized param.json at %s", path);
+        close(fd);
+        return 0;
+    }
+
+    size_t input_size = (size_t)info.st_size;
+    unsigned char *input = malloc(input_size + 1);
+    if (!input) {
+        snprintf(error, error_size, "out of memory reading %s", path);
+        close(fd);
+        return 0;
+    }
+    size_t read_total = 0;
+    while (read_total < input_size) {
+        ssize_t amount = read(fd, input + read_total, input_size - read_total);
+        if (amount < 0 && errno == EINTR) continue;
+        if (amount <= 0) {
+            snprintf(error, error_size, "short read from %s", path);
+            free(input);
+            close(fd);
+            return 0;
+        }
+        read_total += (size_t)amount;
+    }
+    close(fd);
+
+    if (!copy_file_if_missing(path, backup_path, backup_temp, error, error_size)) {
+        free(input);
+        return 0;
+    }
+
+    unsigned char *patched = NULL;
+    size_t patched_size = 0;
+    int replacements = 0;
+    if (!replace_param_title_names(input, input_size, &patched, &patched_size, &replacements) ||
+        replacements <= 0) {
+        snprintf(error, error_size, "%s has no valid localized titleName fields", path);
+        free(input);
+        free(patched);
+        return 0;
+    }
+
+    char temp_path[1024];
+    if (snprintf(temp_path, sizeof(temp_path), "%s.skyboz-tmp", path) >= (int)sizeof(temp_path)) {
+        snprintf(error, error_size, "param.json path is too long");
+        free(input);
+        free(patched);
+        return 0;
+    }
+    (void)unlink(temp_path);
+    int output_fd = open(temp_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (output_fd < 0) {
+        snprintf(error, error_size, "cannot create temporary param.json for %s: %s", path, strerror(errno));
+        free(input);
+        free(patched);
+        return 0;
+    }
+
+    size_t written = 0;
+    int ok = 1;
+    while (written < patched_size) {
+        ssize_t amount = write(output_fd, patched + written, patched_size - written);
+        if (amount < 0 && errno == EINTR) continue;
+        if (amount <= 0) {
+            snprintf(error, error_size, "cannot write temporary param.json for %s: %s", path, strerror(errno));
+            ok = 0;
+            break;
+        }
+        written += (size_t)amount;
+    }
+    if (ok && fchmod(output_fd, info.st_mode & 0777) != 0) {
+        snprintf(error, error_size, "cannot preserve %s permissions: %s", path, strerror(errno));
+        ok = 0;
+    }
+    if (ok && fsync(output_fd) != 0) {
+        snprintf(error, error_size, "cannot sync temporary param.json for %s: %s", path, strerror(errno));
+        ok = 0;
+    }
+    if (close(output_fd) != 0 && ok) {
+        snprintf(error, error_size, "cannot close temporary param.json for %s: %s", path, strerror(errno));
+        ok = 0;
+    }
+    if (ok && rename(temp_path, path) != 0) {
+        snprintf(error, error_size, "cannot install updated param.json at %s: %s", path, strerror(errno));
+        ok = 0;
+    }
+    if (!ok) (void)unlink(temp_path);
+
+    if (ok) {
+        int verify_fd = open(path, O_RDONLY);
+        unsigned char *verify = verify_fd >= 0 ? malloc(patched_size ? patched_size : 1) : NULL;
+        if (verify_fd < 0 || !verify) {
+            snprintf(error, error_size, "cannot verify updated param.json at %s", path);
+            ok = 0;
+        } else {
+            size_t verified = 0;
+            while (verified < patched_size) {
+                ssize_t amount = read(verify_fd, verify + verified, patched_size - verified);
+                if (amount < 0 && errno == EINTR) continue;
+                if (amount <= 0) break;
+                verified += (size_t)amount;
+            }
+            if (verified != patched_size || memcmp(verify, patched, patched_size) != 0) {
+                snprintf(error, error_size, "updated param.json verification failed at %s", path);
+                ok = 0;
+            }
+        }
+        if (verify_fd >= 0) close(verify_fd);
+        free(verify);
+    }
+
+    free(input);
+    free(patched);
+    return ok;
+}
+
 int main(void)
 {
     (void)mkdir(BACKUP_DIR, 0777);
@@ -477,6 +785,29 @@ int main(void)
 
     char error[512] = {0};
     char concept_id[128] = {0};
+    int system_param_updated = 0;
+    if (access(SYSTEM_PARAM_PATH, F_OK) == 0) {
+        if (!update_param_json_file(SYSTEM_PARAM_PATH, SYSTEM_PARAM_BACKUP,
+                SYSTEM_PARAM_BACKUP_TEMP, error, sizeof(error))) {
+            char message[600];
+            snprintf(message, sizeof(message), "ERROR: system param.json update failed: %s", error);
+            write_status(message);
+            return 1;
+        }
+        system_param_updated = 1;
+    } else if (errno != ENOENT) {
+        char message[600];
+        snprintf(message, sizeof(message), "ERROR: cannot check system param.json: %s", strerror(errno));
+        write_status(message);
+        return 1;
+    }
+    if (!update_param_json_file(USER_PARAM_PATH, USER_PARAM_BACKUP,
+            USER_PARAM_BACKUP_TEMP, error, sizeof(error))) {
+        char message[600];
+        snprintf(message, sizeof(message), "ERROR: user param.json update failed: %s", error);
+        write_status(message);
+        return 1;
+    }
     if (!run_app_db_update(concept_id, sizeof(concept_id), error, sizeof(error))) {
         char message[600];
         snprintf(message, sizeof(message), "ERROR: %s", error[0] ? error : "app.db update failed");
@@ -491,6 +822,10 @@ int main(void)
     }
 
     sync();
-    write_status("OK: SKYBOZ tile name and icon saved; restart the console once to refresh its cached tile");
+    if (system_param_updated) {
+        write_status("OK: SKYBOZ LOADER saved in system/user param.json and app databases; icon metadata is persistent");
+    } else {
+        write_status("OK: SKYBOZ LOADER saved in user param.json and app databases; system param.json was not present");
+    }
     return 0;
 }
