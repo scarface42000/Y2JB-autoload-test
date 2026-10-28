@@ -1525,10 +1525,11 @@
             syscall(SYSCALL.close, fd);
             await log("[ICONDB] Helper sent; waiting for the database transaction...");
 
-            for (let attempt = 0; attempt < 300; attempt++) {
+            let lastProgress = "";
+            for (let attempt = 0; attempt < 600; attempt++) {
                 if (file_exists(status_path)) {
                     try {
-                        const status = String.fromCharCode(...read_file(status_path));
+                        const status = String.fromCharCode(...read_file(status_path)).trim();
                         if (status.startsWith("OK:")) {
                             await log("[ICONDB] " + status.slice(3).trim());
                             return true;
@@ -1537,6 +1538,10 @@
                             await log("[ICONDB] " + status.slice(6).trim());
                             return false;
                         }
+                        if (status.startsWith("RUNNING:") && status !== lastProgress) {
+                            lastProgress = status;
+                            await log("[ICONDB] " + status.slice(8).trim());
+                        }
                     } catch (e) {
                         await log("[ICONDB] Could not read helper status: " + e.message);
                         return false;
@@ -1544,14 +1549,30 @@
                 }
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            await log("[ICONDB] No completion status; the existing tile files were left in place");
-            return false;
+
+            let finalStatus = "";
+            if (file_exists(status_path)) {
+                try { finalStatus = String.fromCharCode(...read_file(status_path)).trim(); }
+                catch (e) { finalStatus = ""; }
+            }
+            if (finalStatus.startsWith("RUNNING:")) {
+                await log("[ICONDB] Helper is still running after 60s: " + finalStatus.slice(8).trim());
+            } else if (finalStatus) {
+                await log("[ICONDB] No final status after 60s; last helper status: " + finalStatus);
+            } else {
+                await log("[ICONDB] No helper status file appeared; branding result is unknown");
+            }
+            return null;
         }
 
         // Optional auto-launch: send Payload Manager to elfldr on TCP/9021.
         // This runs only after Relapse reports a successful exploit.
         async function autoload_payload_manager() {
-            await autoload_persistent_icon_metadata();
+            const metadata_result = await autoload_persistent_icon_metadata();
+            if (metadata_result === null) {
+                await log("[AUTOLOAD] Metadata helper may still be using elfldr; not sending Payload Manager yet. Reopen YouTube to retry after it finishes.");
+                return false;
+            }
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             const filename = "Payload_Manager_v0.6.3.elf";

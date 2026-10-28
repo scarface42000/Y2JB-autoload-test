@@ -778,6 +778,7 @@ static int update_param_json_file(const char *path, const char *backup_path,
 int main(void)
 {
     (void)mkdir(BACKUP_DIR, 0777);
+    write_status("RUNNING: helper started; checking SKYBOZ icon");
     if (access(ICON_PATH, R_OK) != 0) {
         write_status("ERROR: persistent SKYBOZ icon file is missing");
         return 1;
@@ -787,6 +788,7 @@ int main(void)
     char concept_id[128] = {0};
     int system_param_updated = 0;
     if (access(SYSTEM_PARAM_PATH, F_OK) == 0) {
+        write_status("RUNNING: updating system param.json");
         if (!update_param_json_file(SYSTEM_PARAM_PATH, SYSTEM_PARAM_BACKUP,
                 SYSTEM_PARAM_BACKUP_TEMP, error, sizeof(error))) {
             char message[600];
@@ -801,6 +803,7 @@ int main(void)
         write_status(message);
         return 1;
     }
+    write_status("RUNNING: updating user param.json");
     if (!update_param_json_file(USER_PARAM_PATH, USER_PARAM_BACKUP,
             USER_PARAM_BACKUP_TEMP, error, sizeof(error))) {
         char message[600];
@@ -808,12 +811,14 @@ int main(void)
         write_status(message);
         return 1;
     }
+    write_status("RUNNING: backing up and updating app.db");
     if (!run_app_db_update(concept_id, sizeof(concept_id), error, sizeof(error))) {
         char message[600];
         snprintf(message, sizeof(message), "ERROR: %s", error[0] ? error : "app.db update failed");
         write_status(message);
         return 1;
     }
+    write_status("RUNNING: backing up and updating appinfo.db");
     if (!run_appinfo_db_update(concept_id, error, sizeof(error))) {
         char message[600];
         snprintf(message, sizeof(message), "ERROR: %s", error[0] ? error : "appinfo.db update failed");
@@ -821,7 +826,6 @@ int main(void)
         return 1;
     }
 
-    sync();
     if (system_param_updated) {
         write_status("OK: SKYBOZ LOADER saved in system/user param.json and app databases; icon metadata is persistent");
     } else {
