@@ -1,0 +1,12 @@
+Y2JB Payload Manager autoload patch (experimental)
+
+Changes:
+- Adds Payload_Manager_v0.6.3.elf to the YouTube download0 cache assets.
+- After Relapse reports successful completion, Relapse.js attempts to connect to 127.0.0.1:9021 and stream the ELF to elfldr.
+- Keeps the original Relapse, kexp, and elfldr files unchanged.
+
+Important limitations:
+- This is a modified SOURCE ZIP, not a rebuilt download0.dat UFS2 image.
+- The code has not been tested on a physical PS5; use at your own risk and keep your original download0.dat.
+- This only autoloads Payload Manager after Y2JB/Relapse is run. It does not trigger the jailbreak automatically at console power-on.
+- The target firmware is PS5 13.60 as supplied by the user; successful execution depends on the user's exact app/version and source image.
