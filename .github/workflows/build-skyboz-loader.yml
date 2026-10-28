@@ -38,6 +38,7 @@ jobs:
           cp "$base" skyboz-build/base/download0-autoclose.zip
           cp payloads/Relapse.js "$cache/Relapse.js"
           cp 'download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf' "$cache/Payload_Manager_v0.6.3.elf"
+          cp assets/icon0-PPSA01650.png "$cache/SKYBOZ_LOADER_icon0.png"
           test -s "$cache/Relapse.js"
           test -s "$cache/Payload_Manager_v0.6.3.elf"
           test -s assets/icon0-PPSA01650.png
@@ -69,9 +70,11 @@ jobs:
             test -d "$cache"
             cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Relapse.js "$cache/Relapse.js"
             cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf "$cache/Payload_Manager_v0.6.3.elf"
-            chmod 0644 "$cache/Relapse.js" "$cache/Payload_Manager_v0.6.3.elf"
+            cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/SKYBOZ_LOADER_icon0.png "$cache/SKYBOZ_LOADER_icon0.png"
+            chmod 0644 "$cache/Relapse.js" "$cache/Payload_Manager_v0.6.3.elf" "$cache/SKYBOZ_LOADER_icon0.png"
             test -s "$cache/Relapse.js"
             test -s "$cache/Payload_Manager_v0.6.3.elf"
+            test -s "$cache/SKYBOZ_LOADER_icon0.png"
             sync
             umount .build/mnt
             mounted=0

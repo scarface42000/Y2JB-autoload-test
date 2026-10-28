@@ -147,6 +147,10 @@ python payload_sender.py 192.168.1.100 9021 hen.bin
 
 After the Relapse payload succeeds, elfldr starts listening on port **9021**.
 
+### Automatic YouTube home-screen icon
+
+After Relapse succeeds, Auto Load copies the 512×512 SKYBOZ icon to `/user/appmeta/PPSA01650/icon0.png`. It saves the existing icon once as `icon0.png.skyboz-original`, and restores the SKYBOZ icon on later Auto Load launches if the file was replaced. Restart the home screen or console once after the first install so the cached tile refreshes. A YouTube update or reinstall can restore Sony's icon; Auto Load reapplies SKYBOZ the next time it runs.
+
 ## Credits
 
 * **[shahrilnet](https://github.com/shahrilnet), [null_ptr](https://github.com/n0llptr)** - Referenced many codes from [Remote Lua Loader](https://github.com/shahrilnet/remote_lua_loader)

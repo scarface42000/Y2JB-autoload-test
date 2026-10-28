@@ -3,10 +3,10 @@ Y2JB Payload Manager autoload patch (experimental)
 Changes:
 - Adds Payload_Manager_v0.6.3.elf to the YouTube download0 cache assets.
 - After Relapse reports successful completion, Relapse.js attempts to connect to 127.0.0.1:9021 and stream the ELF to elfldr.
-- Keeps the original Relapse, kexp, and elfldr files unchanged.
+- Copies the 512x512 SKYBOZ icon to /user/appmeta/PPSA01650/icon0.png after Relapse succeeds, saving the original once and restoring SKYBOZ on later runs if it was replaced.
 
 Important limitations:
 - This is a modified SOURCE ZIP, not a rebuilt download0.dat UFS2 image.
 - The code has not been tested on a physical PS5; use at your own risk and keep your original download0.dat.
-- This only autoloads Payload Manager after Y2JB/Relapse is run. It does not trigger the jailbreak automatically at console power-on.
+- A home-screen restart is needed once for the icon cache to refresh. A YouTube update or reinstall can restore the stock icon; the next Auto Load run reapplies SKYBOZ. This still does not trigger the jailbreak automatically at console power-on.
 - The target firmware is PS5 13.60 as supplied by the user; successful execution depends on the user's exact app/version and source image.

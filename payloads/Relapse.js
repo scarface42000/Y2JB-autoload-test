@@ -1317,6 +1317,137 @@
             }
         }
 
+        function icon_bytes_equal(left, right) {
+            if (!left || !right || left.length !== right.length) return false;
+            for (let i = 0; i < left.length; i++) {
+                if (left[i] !== right[i]) return false;
+            }
+            return true;
+        }
+
+        function write_binary_file(path, bytes) {
+            const path_addr = alloc_string(path);
+            const data_addr = malloc(BigInt(bytes.length));
+            write_buffer(data_addr, bytes);
+            const fd = syscall(SYSCALL.open, path_addr, O_CREAT | O_WRONLY | O_TRUNC, 0x1a4n);
+            if (fd === 0xffffffffffffffffn || fd < 0n) {
+                throw new Error("open failed for " + path);
+            }
+
+            try {
+                let offset = 0;
+                while (offset < bytes.length) {
+                    const amount = syscall(
+                        SYSCALL.write,
+                        fd,
+                        data_addr + BigInt(offset),
+                        BigInt(bytes.length - offset)
+                    );
+                    if (amount === 0xffffffffffffffffn || amount <= 0n) {
+                        throw new Error("write failed for " + path + " at " + offset);
+                    }
+                    offset += Number(amount);
+                }
+
+                const synced = syscall(SYSCALL.fsync, fd);
+                if (synced === 0xffffffffffffffffn || synced < 0n) {
+                    throw new Error("fsync failed for " + path);
+                }
+                return offset;
+            } finally {
+                syscall(SYSCALL.close, fd);
+            }
+        }
+
+        function write_binary_file_atomic(path, bytes) {
+            const temp_path = path + ".skyboz-tmp";
+            try {
+                write_binary_file(temp_path, bytes);
+                if (!icon_bytes_equal(read_file(temp_path), bytes)) {
+                    throw new Error("temporary file verification failed for " + path);
+                }
+
+                const renamed = syscall(
+                    SYSCALL.rename,
+                    alloc_string(temp_path),
+                    alloc_string(path)
+                );
+                if (renamed !== 0n) {
+                    throw new Error("rename failed for " + path);
+                }
+            } catch (e) {
+                syscall(SYSCALL.unlink, alloc_string(temp_path));
+                throw e;
+            }
+        }
+
+        async function inject_home_screen_icon() {
+            try {
+                if (TITLE_ID !== "PPSA01650") {
+                    await log("[ICON] SKYBOZ tile icon is only configured for PPSA01650");
+                    return false;
+                }
+
+                if (syscall(SYSCALL.getuid) !== 0n || syscall(SYSCALL.is_in_sandbox) !== 0n) {
+                    await log("[ICON] Waiting for an unsandboxed root process; icon was not changed");
+                    return false;
+                }
+
+                const asset_name = "SKYBOZ_LOADER_icon0.png";
+                const candidates = [
+                    "/mnt/sandbox/" + TITLE_ID + "_000/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + asset_name,
+                    "/mnt/sandbox/" + TITLE_ID + "_001/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + asset_name,
+                    "/mnt/sandbox/" + TITLE_ID + "_002/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + asset_name,
+                ];
+                let source = null;
+                for (const candidate of candidates) {
+                    if (file_exists(candidate)) { source = candidate; break; }
+                }
+                if (!source) {
+                    await log("[ICON] SKYBOZ icon asset is missing from the YouTube cache");
+                    return false;
+                }
+
+                const icon = read_file(source);
+                const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+                if (icon.length < 24 || !signature.every((value, i) => icon[i] === value)) {
+                    await log("[ICON] Icon asset is not a valid PNG");
+                    return false;
+                }
+                const width = ((icon[16] << 24) | (icon[17] << 16) | (icon[18] << 8) | icon[19]) >>> 0;
+                const height = ((icon[20] << 24) | (icon[21] << 16) | (icon[22] << 8) | icon[23]) >>> 0;
+                if (width !== 512 || height !== 512) {
+                    await log("[ICON] Expected a 512x512 PNG, got " + width + "x" + height);
+                    return false;
+                }
+
+                const target = "/user/appmeta/PPSA01650/icon0.png";
+                const backup = target + ".skyboz-original";
+                if (file_exists(target)) {
+                    const current = read_file(target);
+                    if (icon_bytes_equal(current, icon)) {
+                        await log("[ICON] SKYBOZ tile icon is already installed");
+                        return true;
+                    }
+                    if (!file_exists(backup)) {
+                        write_binary_file_atomic(backup, current);
+                        await log("[ICON] Original tile icon backed up");
+                    }
+                }
+
+                write_binary_file_atomic(target, icon);
+                if (!icon_bytes_equal(read_file(target), icon)) {
+                    throw new Error("installed icon did not match the source");
+                }
+                await log("[ICON] SKYBOZ tile icon installed for PPSA01650");
+                await log("[ICON] Restart the home screen once to refresh its cached tile");
+                return true;
+            } catch (e) {
+                await log("[ICON] Could not install the tile icon: " + ((e && e.message) || e));
+                return false;
+            }
+        }
+
         // Optional auto-launch: send Payload Manager to elfldr on TCP/9021.
         // This runs only after Relapse reports a successful exploit.
         async function autoload_payload_manager() {
@@ -1381,7 +1512,8 @@
 
         async function relapse_kexploit() {
             if (is_jailbroken()) {
-                await log("[*] process is already jailbroken, nothing to do");
+                await log("[*] process is already jailbroken; checking the SKYBOZ tile icon");
+                await inject_home_screen_icon();
                 return;
             }
 
@@ -1413,6 +1545,7 @@
             const result = await run();
             if (result && result.payloads) {
                 await log("[+] kernel exploit complete");
+                await inject_home_screen_icon();
                 await log("[+] elfldr is listening on " + (get_current_ip() || "unknown") + ":9021");
                 await autoload_payload_manager();
             } else {
