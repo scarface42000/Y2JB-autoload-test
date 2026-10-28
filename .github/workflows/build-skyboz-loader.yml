@@ -1,0 +1,90 @@
+name: Build Y2JB SKYBOZ Loader download0.dat
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'download0/cache/**/Payload_Manager_v0.6.3.elf'
+      - 'payloads/Relapse.js'
+      - '.github/workflows/build-skyboz-loader.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out current project
+        uses: actions/checkout@v4
+
+      - name: Check out retained base image
+        uses: actions/checkout@v4
+        with:
+          ref: 9a513d5343e508154190ea465e56adc64bfe7ad0
+          path: .base-source
+
+      - name: Assemble build inputs
+        shell: bash
+        run: |
+          set -eu
+          base='.base-source/autoclose-payload-manager/base/download0-autoclose.zip'
+          expected='a044d046e283f1ea8e97c945278f6767c064e510701a7fa2d3d1276428e72a3a'
+          printf '%s  %s\n' "$expected" "$base" | sha256sum --check -
+          cache='skyboz-build/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY='
+          mkdir -p skyboz-build/base "$cache"
+          cp "$base" skyboz-build/base/download0-autoclose.zip
+          cp payloads/Relapse.js "$cache/Relapse.js"
+          cp 'download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf' "$cache/Payload_Manager_v0.6.3.elf"
+          test -s "$cache/Relapse.js"
+          test -s "$cache/Payload_Manager_v0.6.3.elf"
+
+      - name: Patch the UFS2 image in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          copyback: true
+          run: |
+            set -eu
+            cd skyboz-build
+            expected='a044d046e283f1ea8e97c945278f6767c064e510701a7fa2d3d1276428e72a3a'
+            actual=$(sha256 -q base/download0-autoclose.zip)
+            test "$actual" = "$expected"
+            unzip -p base/download0-autoclose.zip download0.dat > download0.dat
+            test "$(stat -f '%z' download0.dat)" = "336789504"
+            mkdir -p .build/mnt
+            md=$(mdconfig -a -t vnode -f download0.dat)
+            mounted=0
+            cleanup() {
+              if [ "$mounted" -eq 1 ]; then umount .build/mnt || true; fi
+              if [ -n "$md" ]; then mdconfig -d -u "$md" || true; fi
+            }
+            trap cleanup EXIT
+            mount -t ufs "/dev/$md" .build/mnt
+            mounted=1
+            cache=.build/mnt/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=
+            test -d "$cache"
+            cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Relapse.js "$cache/Relapse.js"
+            cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf "$cache/Payload_Manager_v0.6.3.elf"
+            chmod 0644 "$cache/Relapse.js" "$cache/Payload_Manager_v0.6.3.elf"
+            test -s "$cache/Relapse.js"
+            test -s "$cache/Payload_Manager_v0.6.3.elf"
+            sync
+            umount .build/mnt
+            mounted=0
+            mdconfig -d -u "$md"
+            md=
+            trap - EXIT
+            test "$(stat -f '%z' download0.dat)" -eq 336789504
+            sha256 -q download0.dat > download0.dat.sha256
+            file download0.dat
+
+      - name: Upload the patched image
+        uses: actions/upload-artifact@v4
+        with:
+          name: download0-dat-skyboz-loader
+          path: |
+            skyboz-build/download0.dat
+            skyboz-build/download0.dat.sha256
+          if-no-files-found: error
