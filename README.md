@@ -149,7 +149,9 @@ After the Relapse payload succeeds, elfldr starts listening on port **9021**. If
 
 ### Automatic YouTube home-screen icon
 
-After Relapse succeeds, Auto Load copies the 512×512 SKYBOZ icon to `/user/appmeta/PPSA01650/icon0.png`. It saves the existing icon once as `icon0.png.skyboz-original`, and restores the SKYBOZ icon on later Auto Load launches if the file was replaced. Restart the home screen or console once after the first install so the cached tile refreshes. A YouTube update or reinstall can restore Sony's icon; Auto Load reapplies SKYBOZ the next time it runs.
+After Relapse succeeds, Auto Load copies the 512×512 SKYBOZ icon to `/user/appmeta/PPSA01650/icon0.png` and to the persistent file `SKYBOZ_LOADER_icon0.png` in the same folder. Before changing the tile metadata, the helper saves a SQLite backup at `/data/skyboz-loader/app.db.before-icon`; it then updates the icon path for PPSA01650 in `/system_data/priv/mms/app.db` inside a transaction. This lets the home screen keep using the SKYBOZ image after a normal restart, instead of reverting to the YouTube icon. Restart the console once after the first successful installation so the home-screen cache reloads. A YouTube update or reinstall can reset the metadata; launching Auto Load again reapplies it.
+
+**Database safety:** the helper stops without committing if the expected database rows or schema are missing, and keeps the pre-change database backup at the path above. This modifies the PS5 home-screen database; keep a separate copy of that backup off the console before trying the build.
 
 ## Credits
 

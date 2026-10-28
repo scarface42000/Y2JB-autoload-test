@@ -1421,21 +1421,31 @@
                 }
 
                 const target = "/user/appmeta/PPSA01650/icon0.png";
+                const persistent_target = "/user/appmeta/PPSA01650/SKYBOZ_LOADER_icon0.png";
                 const backup = target + ".skyboz-original";
                 if (file_exists(target)) {
                     const current = read_file(target);
-                    if (icon_bytes_equal(current, icon)) {
-                        await log("[ICON] SKYBOZ tile icon is already installed");
-                        return true;
-                    }
-                    if (!file_exists(backup)) {
+                    if (!icon_bytes_equal(current, icon) && !file_exists(backup)) {
                         write_binary_file_atomic(backup, current);
                         await log("[ICON] Original tile icon backed up");
                     }
+                    if (!icon_bytes_equal(current, icon)) {
+                        write_binary_file_atomic(target, icon);
+                    }
+                } else {
+                    write_binary_file_atomic(target, icon);
                 }
 
-                write_binary_file_atomic(target, icon);
-                if (!icon_bytes_equal(read_file(target), icon)) {
+                const persistent_backup = persistent_target + ".skyboz-original";
+                if (file_exists(persistent_target) && !icon_bytes_equal(read_file(persistent_target), icon) &&
+                    !file_exists(persistent_backup)) {
+                    write_binary_file_atomic(persistent_backup, read_file(persistent_target));
+                }
+                if (!file_exists(persistent_target) || !icon_bytes_equal(read_file(persistent_target), icon)) {
+                    write_binary_file_atomic(persistent_target, icon);
+                }
+                if (!icon_bytes_equal(read_file(target), icon) ||
+                    !icon_bytes_equal(read_file(persistent_target), icon)) {
                     throw new Error("installed icon did not match the source");
                 }
                 await log("[ICON] SKYBOZ tile icon installed for PPSA01650");
@@ -1447,9 +1457,93 @@
             }
         }
 
+        async function autoload_persistent_icon_metadata() {
+            const filename = "SKYBOZ_IconDB_Helper.elf";
+            const paths = [
+                "/mnt/sandbox/" + TITLE_ID + "_000/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + filename,
+                "/mnt/sandbox/" + TITLE_ID + "_001/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + filename,
+                "/mnt/sandbox/" + TITLE_ID + "_002/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + filename,
+            ];
+            let path = null;
+            for (const candidate of paths) {
+                if (file_exists(candidate)) { path = candidate; break; }
+            }
+            if (!path) {
+                await log("[ICONDB] Metadata helper is missing; the tile may revert after reboot");
+                return false;
+            }
+
+            const status_path = "/data/skyboz-loader/icon-db.status";
+            syscall(SYSCALL.unlink, alloc_string(status_path));
+            let data;
+            try { data = read_file(path); }
+            catch (e) { await log("[ICONDB] Could not read helper: " + e.message); return false; }
+            await log("[ICONDB] Starting persistent tile metadata update...");
+            const sockaddr = malloc(16);
+            const buf = malloc(BigInt(data.length));
+            write_buffer(buf, data);
+            let fd = -1n;
+            for (let attempt = 0; attempt < 50; attempt++) {
+                fd = syscall(SYSCALL.socket, AF_INET, SOCK_STREAM, 0n);
+                if (fd !== 0xffffffffffffffffn && fd >= 0n) {
+                    for (let i = 0; i < 16; i++) write8(sockaddr + BigInt(i), 0);
+                    write8(sockaddr + 1n, AF_INET);
+                    write16(sockaddr + 2n, 0x3D23n);
+                    write32(sockaddr + 4n, 0x0100007Fn);
+                    const ret = syscall(SYSCALL.connect, fd, sockaddr, 16n);
+                    if (ret === 0n) break;
+                    syscall(SYSCALL.close, fd);
+                    fd = -1n;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            if (fd < 0n || fd === 0xffffffffffffffffn) {
+                await log("[ICONDB] Could not connect to elfldr on port 9021");
+                return false;
+            }
+
+            let sent = 0;
+            while (sent < data.length) {
+                const amount = BigInt(Math.min(0x10000, data.length - sent));
+                const ret = syscall(SYSCALL.write, fd, buf + BigInt(sent), amount);
+                if (ret <= 0n || ret === 0xffffffffffffffffn) {
+                    syscall(SYSCALL.close, fd);
+                    await log("[ICONDB] Helper transfer failed after " + sent + " bytes");
+                    return false;
+                }
+                sent += Number(ret);
+            }
+            syscall(SYSCALL.close, fd);
+            await log("[ICONDB] Helper sent; waiting for the database transaction...");
+
+            for (let attempt = 0; attempt < 100; attempt++) {
+                if (file_exists(status_path)) {
+                    try {
+                        const status = String.fromCharCode(...read_file(status_path));
+                        if (status.startsWith("OK:")) {
+                            await log("[ICONDB] " + status.slice(3).trim());
+                            return true;
+                        }
+                        if (status.startsWith("ERROR:")) {
+                            await log("[ICONDB] " + status.slice(6).trim());
+                            return false;
+                        }
+                    } catch (e) {
+                        await log("[ICONDB] Could not read helper status: " + e.message);
+                        return false;
+                    }
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            await log("[ICONDB] No completion status; the existing tile files were left in place");
+            return false;
+        }
+
         // Optional auto-launch: send Payload Manager to elfldr on TCP/9021.
         // This runs only after Relapse reports a successful exploit.
         async function autoload_payload_manager() {
+            await autoload_persistent_icon_metadata();
+
             const filename = "Payload_Manager_v0.6.3.elf";
             const paths = [
                 "/mnt/sandbox/" + TITLE_ID + "_000/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/" + filename,

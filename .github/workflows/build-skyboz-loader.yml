@@ -6,6 +6,7 @@ on:
     paths:
       - 'download0/cache/**/Payload_Manager_v0.6.3.elf'
       - 'payloads/Relapse.js'
+      - 'payloads/icon-db-helper/**'
       - 'assets/icon0-PPSA01650.png'
       - '.github/workflows/build-skyboz-loader.yml'
   workflow_dispatch:
@@ -26,6 +27,30 @@ jobs:
           ref: 9a513d5343e508154190ea465e56adc64bfe7ad0
           path: .base-source
 
+      - name: Build persistent icon database helper
+        shell: bash
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y clang-18 lld-18 llvm-18 python3-pyelftools
+          mkdir -p .build-deps
+          sdk='.build-deps/ps5-payload-sdk.zip'
+          curl -fL 'https://github.com/ps5-payload-dev/sdk/releases/download/v0.41/ps5-payload-sdk.zip' -o "$sdk"
+          printf '%s  %s\n' 'ebfb0acb5260511951a80e17db41650c62d20a8caf8659a230b928dc85005984' "$sdk" | sha256sum --check -
+          unzip -q "$sdk" -d .build-deps
+          sqlite='.build-deps/sqlite-amalgamation.zip'
+          curl -fL 'https://www.sqlite.org/2024/sqlite-amalgamation-3460000.zip' -o "$sqlite"
+          printf '%s  %s\n' '712a7d09d2a22652fb06a49af516e051979a3984adb067da86760e60ed51a7f5' "$sqlite" | sha256sum --check -
+          unzip -q "$sqlite" -d .build-deps
+          export PATH="/usr/lib/llvm-18/bin:$PATH"
+          export PS5_PAYLOAD_SDK="$GITHUB_WORKSPACE/.build-deps/ps5-payload-sdk"
+          export SQLITE_DIR="$GITHUB_WORKSPACE/.build-deps/sqlite-amalgamation-3460000"
+          make -C payloads/icon-db-helper
+          cache='skyboz-build/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY='
+          mkdir -p "$cache"
+          cp payloads/icon-db-helper/SKYBOZ_IconDB_Helper.elf "$cache/SKYBOZ_IconDB_Helper.elf"
+          test -s "$cache/SKYBOZ_IconDB_Helper.elf"
+
       - name: Assemble build inputs
         shell: bash
         run: |
@@ -39,9 +64,11 @@ jobs:
           cp payloads/Relapse.js "$cache/Relapse.js"
           cp 'download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf' "$cache/Payload_Manager_v0.6.3.elf"
           cp assets/icon0-PPSA01650.png "$cache/SKYBOZ_LOADER_icon0.png"
+          cp payloads/icon-db-helper/SKYBOZ_IconDB_Helper.elf "$cache/SKYBOZ_IconDB_Helper.elf"
           test -s "$cache/Relapse.js"
           test -s "$cache/Payload_Manager_v0.6.3.elf"
           test -s assets/icon0-PPSA01650.png
+          test -s "$cache/SKYBOZ_IconDB_Helper.elf"
 
       - name: Patch the UFS2 image in FreeBSD
         uses: vmactions/freebsd-vm@v1
@@ -71,10 +98,12 @@ jobs:
             cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Relapse.js "$cache/Relapse.js"
             cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf "$cache/Payload_Manager_v0.6.3.elf"
             cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/SKYBOZ_LOADER_icon0.png "$cache/SKYBOZ_LOADER_icon0.png"
-            chmod 0644 "$cache/Relapse.js" "$cache/Payload_Manager_v0.6.3.elf" "$cache/SKYBOZ_LOADER_icon0.png"
+            cp download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/SKYBOZ_IconDB_Helper.elf "$cache/SKYBOZ_IconDB_Helper.elf"
+            chmod 0644 "$cache/Relapse.js" "$cache/Payload_Manager_v0.6.3.elf" "$cache/SKYBOZ_LOADER_icon0.png" "$cache/SKYBOZ_IconDB_Helper.elf"
             test -s "$cache/Relapse.js"
             test -s "$cache/Payload_Manager_v0.6.3.elf"
             test -s "$cache/SKYBOZ_LOADER_icon0.png"
+            test -s "$cache/SKYBOZ_IconDB_Helper.elf"
             sync
             umount .build/mnt
             mounted=0
