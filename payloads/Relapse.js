@@ -326,17 +326,16 @@
         }
 
         function wait_for_pending_requests(candidate_ids, candidate_count, wanted_count) {
-            const poll_id = alloc(4);
-            const poll_state = alloc(4);
+            const states = alloc(4 * candidate_count + 8);
             const pending_indices = [];
             const seen = {};
 
             for (let attempt = 0; attempt < 150 && pending_indices.length < wanted_count; attempt++) {
+                // These socketpair reads stay blocked until the reclaim step, so poll all candidates together.
+                sysnum(SYSCALL.aio_multi_poll, candidate_ids, BigInt(candidate_count), states);
                 for (let index = 0; index < candidate_count && pending_indices.length < wanted_count; index++) {
                     if (seen[index]) continue;
-                    write32(poll_id, read32(candidate_ids + BigInt(index * 4)));
-                    sysnum(SYSCALL.aio_multi_poll, poll_id, 1n, poll_state);
-                    if ((Number(read32(poll_state)) & 0xffff) === 1) {
+                    if ((Number(read32(states + BigInt(index * 4))) & 0xffff) === 1) {
                         pending_indices.push(index);
                         seen[index] = true;
                     }
