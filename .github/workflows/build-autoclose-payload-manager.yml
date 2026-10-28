@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          printf '%s  %s\\n' 'a044d046e283f1ea8e97c945278f6767c064e510701a7fa2d3d1276428e72a3a' 'autoclose-payload-manager/base/download0-autoclose.zip' | sha256sum --check -
+          echo 'a044d046e283f1ea8e97c945278f6767c064e510701a7fa2d3d1276428e72a3a  autoclose-payload-manager/base/download0-autoclose.zip' | sha256sum --check -
           test -s 'autoclose-payload-manager/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Relapse.js'
           test -s 'autoclose-payload-manager/download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/Payload_Manager_v0.6.3.elf'
 
