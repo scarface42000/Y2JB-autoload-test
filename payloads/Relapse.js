@@ -1512,8 +1512,9 @@
 
         async function relapse_kexploit() {
             if (is_jailbroken()) {
-                await log("[*] process is already jailbroken; checking the SKYBOZ tile icon");
+                await log("[*] process is already jailbroken; checking the SKYBOZ tile icon and retrying Payload Manager");
                 await inject_home_screen_icon();
+                await autoload_payload_manager();
                 return;
             }
 
