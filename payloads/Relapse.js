@@ -1565,6 +1565,30 @@
             return null;
         }
 
+        async function wait_for_elfldr() {
+            const sockaddr = malloc(16);
+            for (let i = 0; i < 16; i++) write8(sockaddr + BigInt(i), 0n);
+            write8(sockaddr + 1n, AF_INET);
+            write16(sockaddr + 2n, 0x3D23n);
+            write32(sockaddr + 4n, 0x0100007Fn);
+
+            for (let attempt = 0; attempt < 200; attempt++) {
+                const probe = syscall(SYSCALL.socket, AF_INET, SOCK_STREAM, 0n);
+                if (probe !== 0xffffffffffffffffn && probe >= 0n) {
+                    const connected = syscall(SYSCALL.connect, probe, sockaddr, 16n);
+                    syscall(SYSCALL.close, probe);
+                    if (connected === 0n) {
+                        await log("[AUTOLOAD] elfldr is accepting connections");
+                        return true;
+                    }
+                }
+                await new Promise(resolve => setTimeout(resolve, 25));
+            }
+
+            await log("[AUTOLOAD] elfldr did not become ready after 5 seconds");
+            return false;
+        }
+
         // Optional auto-launch: send Payload Manager to elfldr on TCP/9021.
         // This runs only after Relapse reports a successful exploit.
         async function autoload_payload_manager() {
@@ -1573,7 +1597,10 @@
                 await log("[AUTOLOAD] Metadata helper may still be using elfldr; not sending Payload Manager yet. Reopen YouTube to retry after it finishes.");
                 return false;
             }
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (!(await wait_for_elfldr())) {
+                await log("[AUTOLOAD] Payload Manager was not sent; reopen YouTube or send it manually if elfldr becomes available");
+                return false;
+            }
 
             const filename = "Payload_Manager_v0.6.3.elf";
             const paths = [

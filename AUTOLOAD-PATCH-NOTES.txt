@@ -7,6 +7,7 @@ Changes:
 - Creates one-time pre-change backups in /data/skyboz-loader/ and verifies the SQLite backups before changing either database.
 - Waits for elfldr to stabilize and retries connections to reduce Payload Manager handoff failures.
 - Reports each metadata update stage, waits up to 60 seconds for completion, and avoids sending Payload Manager while the helper may still be running.
+- Probes elfldr readiness for up to 5 seconds before sending Payload Manager, matching the upstream v1.1.0 connection-readiness fix.
 
 Limitations:
 - The GitHub Actions build assembles a new download0.dat UFS2 image; use the artifact from the matching successful workflow run.
