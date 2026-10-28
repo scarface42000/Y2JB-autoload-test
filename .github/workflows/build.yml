@@ -1,4 +1,3 @@
-
 name: Build Y2JB download0.dat (UFS2)
 
 on:
@@ -8,13 +7,13 @@ permissions:
   contents: read
 
 jobs:
-  check-sources:
+  build-ufs2:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Verify required files
+      - name: Verify required source files
         shell: bash
         run: |
           set -eu
@@ -23,5 +22,32 @@ jobs:
           test -f "$ROOT/elfldr-ps5-1360.elf"
           test -f "$ROOT/Payload_Manager_v0.6.3.elf"
           test -f "$ROOT/RelapseOffsets.js"
-          echo "Sources found. Ready for build integration."
+          echo "Required source files found."
 
+      - name: Build UFS2 image in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          copyback: true
+          run: |
+            set -eu
+            truncate -s 336789504 download0.dat
+            MD="$(mdconfig -a -t vnode -f "$PWD/download0.dat")"
+            trap 'umount /mnt 2>/dev/null || true; mdconfig -d -u "$MD" 2>/dev/null || true' EXIT
+            newfs -O 2 -b 32768 -f 4096 "/dev/$MD"
+            mkdir -p /mnt
+            mount "/dev/$MD" /mnt
+            cp -Rp download0/. /mnt/
+            sync
+            umount /mnt
+            mdconfig -d -u "$MD"
+            trap - EXIT
+            test "$(stat -f '%z' download0.dat)" -eq 336789504
+            file download0.dat
+
+      - name: Upload generated image
+        uses: actions/upload-artifact@v4
+        with:
+          name: download0-dat-ufs2
+          path: download0.dat
+          if-no-files-found: error
