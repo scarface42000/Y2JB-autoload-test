@@ -21,30 +21,41 @@
 #define SYSTEM_PARAM_BACKUP_TEMP SYSTEM_PARAM_BACKUP ".tmp"
 #define USER_PARAM_BACKUP BACKUP_DIR "/user-param.json.before-skyboz-branding"
 #define USER_PARAM_BACKUP_TEMP USER_PARAM_BACKUP ".tmp"
-#define STATUS_PATH BACKUP_DIR "/icon-db.status"
+#define STATUS_PATH "/user/appmeta/PPSA01650/icon-db.status"
 #define STATUS_TEMP STATUS_PATH ".tmp"
+#define STATUS_FALLBACK_PATH BACKUP_DIR "/icon-db.status"
+#define STATUS_FALLBACK_TEMP STATUS_FALLBACK_PATH ".tmp"
 #define ICON_PATH "/user/appmeta/PPSA01650/SKYBOZ_LOADER_icon0.png"
 #define ICON_URI ICON_PATH "?ts=1"
 #define TITLE_ID "PPSA01650"
 #define NEW_TITLE "SKYBOZ LOADER"
 
-static void write_status(const char *message)
+static int write_status_file(const char *status_path, const char *temp_path,
+    const char *message)
 {
-    (void)mkdir(BACKUP_DIR, 0777);
-    int fd = open(STATUS_TEMP, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (fd < 0) return;
+    int fd = open(temp_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0) return 0;
 
     size_t length = strlen(message);
     size_t written = 0;
     while (written < length) {
         ssize_t amount = write(fd, message + written, length - written);
+        if (amount < 0 && errno == EINTR) continue;
         if (amount <= 0) break;
         written += (size_t)amount;
     }
     if (written == length) (void)fsync(fd);
     (void)close(fd);
-    if (written == length) (void)rename(STATUS_TEMP, STATUS_PATH);
-    else (void)unlink(STATUS_TEMP);
+    if (written == length && rename(temp_path, status_path) == 0) return 1;
+    (void)unlink(temp_path);
+    return 0;
+}
+
+static void write_status(const char *message)
+{
+    (void)mkdir(BACKUP_DIR, 0777);
+    (void)write_status_file(STATUS_PATH, STATUS_TEMP, message);
+    (void)write_status_file(STATUS_FALLBACK_PATH, STATUS_FALLBACK_TEMP, message);
 }
 
 static int database_integrity_ok(const char *path)

@@ -1482,8 +1482,13 @@
                 return false;
             }
 
-            const status_path = "/data/skyboz-loader/icon-db.status";
-            syscall(SYSCALL.unlink, alloc_string(status_path));
+            const status_paths = [
+                "/user/appmeta/PPSA01650/icon-db.status",
+                "/data/skyboz-loader/icon-db.status"
+            ];
+            for (const stale_status_path of status_paths) {
+                syscall(SYSCALL.unlink, alloc_string(stale_status_path));
+            }
             let data;
             try { data = read_file(path); }
             catch (e) { await log("[ICONDB] Could not read helper: " + e.message); return false; }
@@ -1527,7 +1532,11 @@
 
             let lastProgress = "";
             for (let attempt = 0; attempt < 600; attempt++) {
-                if (file_exists(status_path)) {
+                let status_path = null;
+                for (const candidate of status_paths) {
+                    if (file_exists(candidate)) { status_path = candidate; break; }
+                }
+                if (status_path) {
                     try {
                         const status = String.fromCharCode(...read_file(status_path)).trim();
                         if (status.startsWith("OK:")) {
@@ -1551,8 +1560,12 @@
             }
 
             let finalStatus = "";
-            if (file_exists(status_path)) {
-                try { finalStatus = String.fromCharCode(...read_file(status_path)).trim(); }
+            let finalStatusPath = null;
+            for (const candidate of status_paths) {
+                if (file_exists(candidate)) { finalStatusPath = candidate; break; }
+            }
+            if (finalStatusPath) {
+                try { finalStatus = String.fromCharCode(...read_file(finalStatusPath)).trim(); }
                 catch (e) { finalStatus = ""; }
             }
             if (finalStatus.startsWith("RUNNING:")) {
