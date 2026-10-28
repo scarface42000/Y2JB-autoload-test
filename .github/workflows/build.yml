@@ -1,1 +1,27 @@
 
+name: Build Y2JB download0.dat (UFS2)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify required files
+        shell: bash
+        run: |
+          set -eu
+          ROOT="download0/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY="
+          test -f "$ROOT/main.js"
+          test -f "$ROOT/elfldr-ps5-1360.elf"
+          test -f "$ROOT/Payload_Manager_v0.6.3.elf"
+          test -f "$ROOT/RelapseOffsets.js"
+          echo "Sources found. Ready for build integration."
+
