@@ -147,12 +147,11 @@ python payload_sender.py 192.168.1.100 9021 hen.bin
 
 After the Relapse payload succeeds, elfldr starts listening on port **9021**. If YouTube is opened again while the PS5 is already jailbroken, Auto Load skips the exploit and retries Payload Manager. Reopen YouTube to relaunch it after it closes or fails, as long as elfldr is still listening on port 9021.
 
-### Automatic YouTube home-screen icon
+### Automatic YouTube home-screen icon and name
 
-After Relapse succeeds, Auto Load copies the 512×512 SKYBOZ icon to `/user/appmeta/PPSA01650/icon0.png` and to the persistent file `SKYBOZ_LOADER_icon0.png` in the same folder. Before changing the tile metadata, the helper saves a SQLite backup at `/data/skyboz-loader/app.db.before-icon`; it then updates the icon path for PPSA01650 in `/system_data/priv/mms/app.db` inside a transaction. This lets the home screen keep using the SKYBOZ image after a normal restart, instead of reverting to the YouTube icon. Restart the console once after the first successful installation so the home-screen cache reloads. A YouTube update or reinstall can reset the metadata; launching Auto Load again reapplies it.
+After Relapse succeeds, Auto Load copies the 512×512 SKYBOZ icon to `/user/appmeta/PPSA01650/icon0.png` and to the persistent file `SKYBOZ_LOADER_icon0.png` in the same folder. Its helper backs up `/system_data/priv/mms/app.db` and `/system_data/priv/mms/appinfo.db` under `/data/skyboz-loader/`, then updates the icon path and the displayed tile name to `SKYBOZ LOADER` for PPSA01650. The YouTube application itself remains YouTube. Restart the console once after the first successful installation so the home-screen cache reloads. A YouTube update or reinstall can reset the metadata; launching Auto Load again reapplies it.
 
-**Database safety:** the helper stops without committing if the expected database rows or schema are missing, and keeps the pre-change database backup at the path above. This modifies the PS5 home-screen database. Before trying the build, copy the current `/system_data/priv/mms/app.db` to a PC over FTP as an additional recovery copy; the helper also creates its own verified backup on the console immediately before changing the database.
-
+**Database safety:** before trying this build, copy both databases to a PC over FTP as recovery copies. The helper also creates verified pre-change backups named `app.db.before-skyboz-branding` and `appinfo.db.before-skyboz-branding` in `/data/skyboz-loader/`. Each database is changed in its own transaction; if the helper reports an error, keep the backups and copy the error from the YouTube/Relapse log before retrying.
 ## Credits
 
 * **[shahrilnet](https://github.com/shahrilnet), [null_ptr](https://github.com/n0llptr)** - Referenced many codes from [Remote Lua Loader](https://github.com/shahrilnet/remote_lua_loader)
