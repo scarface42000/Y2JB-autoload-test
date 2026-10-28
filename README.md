@@ -145,7 +145,7 @@ python payload_sender.py 192.168.1.100 9021 hen.bin
 **Firmware Compatibility:** Works up to firmware 13.60
 - Requires an active network connection (Wi-Fi or Ethernet). 
 
-After the Relapse payload succeeds, elfldr starts listening on port **9021**.
+After the Relapse payload succeeds, elfldr starts listening on port **9021**. If YouTube is opened again while the PS5 is already jailbroken, Auto Load skips the exploit and retries Payload Manager. Reopen YouTube to relaunch it after it closes or fails, as long as elfldr is still listening on port 9021.
 
 ### Automatic YouTube home-screen icon
 
