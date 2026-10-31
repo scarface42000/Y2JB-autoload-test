@@ -1,0 +1,81 @@
+name: Build SKYBOZ PLK
+
+on:
+  push:
+    paths:
+      - 'skyboz-plk/**'
+      - '.github/workflows/build-skyboz-plk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build pinned PLK runtime with SKYBOZ artwork
+        run: python3 skyboz-plk/build.py --version "skyboz-1.1.0-${GITHUB_SHA:0:7}"
+      - name: Verify update package
+        run: python3 skyboz-plk/verify_package.py skyboz-plk/dist/y2jb_update.zip
+      - name: Create UFS2 installation image
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.2'
+          copyback: true
+          run: |
+            set -eu
+            cd skyboz-plk/dist
+            truncate -s 336789504 download0.dat
+            md=$(mdconfig -a -t vnode -f "$(pwd)/download0.dat")
+            mkdir -p image-mount
+            mounted=0
+            cleanup() {
+              if [ "$mounted" -eq 1 ]; then umount image-mount || true; fi
+              if [ -n "$md" ]; then mdconfig -d -u "$md" || true; fi
+            }
+            trap cleanup EXIT
+            newfs -O 2 -b 32768 -f 4096 "/dev/$md"
+            mount -t ufs "/dev/$md" image-mount
+            mounted=1
+            cp -R download0/* image-mount/
+            chmod -R 777 image-mount/cache
+            chmod 444 image-mount/cache/splash_screen/aHR0cHM6Ly93d3cueW91dHViZS5jb20vdHY=/splash.html
+            sync
+            diff -qr download0/cache image-mount/cache
+            umount image-mount
+            mounted=0
+            # Remount read-only and compare every file before delivering the image.
+            mount -t ufs -o ro "/dev/$md" image-mount
+            mounted=1
+            diff -qr download0/cache image-mount/cache
+            umount image-mount
+            mounted=0
+            mdconfig -d -u "$md"
+            md=
+            trap - EXIT
+            test "$(stat -f '%z' download0.dat)" -eq 336789504
+            sha256 -q download0.dat | awk '{print $1 "  download0.dat"}' > download0.dat.sha256
+            file download0.dat
+      - name: Include installation instructions and licenses
+        run: |
+          cp skyboz-plk/README.md skyboz-plk/LICENSE skyboz-plk/LICENSE-MIT skyboz-plk/dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skyboz-plk-ready-files
+          if-no-files-found: error
+          path: |
+            skyboz-plk/dist/download0.dat
+            skyboz-plk/dist/download0.dat.sha256
+            skyboz-plk/dist/y2jb_update.zip
+            skyboz-plk/dist/y2jb_update.zip.sha256
+            skyboz-plk/dist/README.md
+            skyboz-plk/dist/LICENSE
+            skyboz-plk/dist/LICENSE-MIT
