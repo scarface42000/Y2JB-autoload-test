@@ -1,0 +1,52 @@
+/* SKYBOZ visual theme. Y2JB/PLK controls and progress hooks are unchanged. */
+body { background: #100508; }
+#autoloader_ui {
+    box-sizing: border-box;
+    padding: 0 !important;
+    border: 0 !important;
+    background-color: #100508 !important;
+    background-image: linear-gradient(90deg, rgba(16,5,8,.98), rgba(16,5,8,.87)), url("icon0.png");
+    background-position: center, right center;
+    background-repeat: no-repeat;
+    background-size: cover, 1000px 1000px;
+}
+#autoloader_ui > div:first-child {
+    margin: 64px auto 0 !important;
+    padding: 0 !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 52px !important;
+    letter-spacing: 7px;
+    color: #fff !important;
+}
+#autoloader_ui > div:first-child::before {
+    content: "";
+    display: inline-block;
+    width: 90px;
+    height: 90px;
+    margin-right: 28px;
+    border-radius: 22px;
+    background: url("icon0.png") center / cover;
+    vertical-align: middle;
+}
+#logWrapper {
+    box-sizing: border-box;
+    width: 76% !important;
+    height: 57% !important;
+    margin: 38px auto 0 !important;
+    background: rgba(10, 7, 10, .87) !important;
+    border: 1px solid #71343c !important;
+    border-radius: 18px !important;
+    font-size: 25px !important;
+    line-height: 1.4;
+    color: #e7dfe2 !important;
+}
+#logContainer { padding: 24px !important; overflow-wrap: break-word; max-width: 100%; box-sizing: border-box; }
+#autoloader_ui > div:nth-child(3) {
+    width: 76% !important;
+    height: 88px !important;
+    margin-top: 30px !important;
+    background: #251016 !important;
+    border: 1px solid #9b2836 !important;
+}
+#progressBar { background: linear-gradient(90deg, #a70017, #f52237) !important; }
+#progressLabel { font-size: 30px !important; white-space: nowrap; }
